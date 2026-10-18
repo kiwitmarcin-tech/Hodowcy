@@ -1,0 +1,62 @@
+<!doctype html><html lang="pl"><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><title>Hodowcy</title>
+<style>body{font-family:system-ui;background:#f3f0e7;color:#243b2e;margin:0}header{background:#24513c;color:white;padding:15px}main{max-width:850px;margin:auto;padding:12px}.card{background:white;border-radius:12px;padding:12px;margin:10px 0}svg{width:100%;touch-action:manipulation}button,select{font:inherit;padding:9px;border-radius:7px;border:1px solid #aaa;background:white}button{background:#287a4e;color:white}.small{font-size:13px}#history{max-height:170px;overflow:auto}</style>
+<header><h2>🐾 Hodowcy — prototyp 0.1</h2></header><main><div class="card"><label>Gracze <select id="count"><option>3</option><option selected>4</option></select></label> <button id="new">Nowa plansza</button><p id="status"></p></div>
+<div class="card"><svg id="board" viewBox="0 0 750 690"></svg><p class="small">Zielone punkty: dostępne miejsca na hodowlę. Kolorowe punkty: zajęte.</p></div>
+<div class="card"><button id="roll" disabled>Rzuć kośćmi</button> <button id="next" disabled>Kolejny gracz</button><p id="dice"></p><div id="players"></div></div><div class="card"><b>Dziennik</b><div id="history" class="small"></div></div></main>
+<script>
+const breeds=[["Golden Retriever",4,"#e6c47b"],["Border Collie",4,"#b1d0a2"],["Husky",4,"#b4d4e6"],["Malinois",3,"#dcb18a"],["Whippet",3,"#d6c4dc"]];
+const numbers=[5,2,6,3,8,10,9,12,11,4,8,10,9,4,5,6,3,11],colors=["#c95544","#3984c2","#9960c7","#ce9c25"];
+const NS="http://www.w3.org/2000/svg",svg=document.getElementById("board");
+let cells=[],verts=[],players=[],order=[],step=0,mode="setup",turn=0,rolled=false,inspector=0,bank=[],history=[];
+function el(tag,attrs={},text){let e=document.createElementNS(NS,tag);for(let k in attrs)e.setAttribute(k,attrs[k]);if(text!==undefined)e.textContent=text;return e}
+function shuffle(a){a=[...a];for(let i=a.length-1;i>0;i--){let j=Math.floor(Math.random()*(i+1));[a[i],a[j]]=[a[j],a[i]]}return a}
+function say(t){history.unshift(t);document.getElementById("history").textContent=history.slice(0,25).join("\n");document.getElementById("history").style.whiteSpace="pre-line"}
+function init(){
+ cells=[];verts=[];let m=new Map(),s=65;
+ for(let r=-2;r<=2;r++)for(let q=-2;q<=2;q++)if(Math.abs(q+r)<=2){
+ let x=375+Math.sqrt(3)*s*(q+r/2),y=345+1.5*s*r,v=[];
+ for(let k=0;k<6;k++){let a=(60*k-30)*Math.PI/180,px=x+s*Math.cos(a),py=y+s*Math.sin(a),key=Math.round(px*100)+","+Math.round(py*100);
+ if(!m.has(key)){m.set(key,verts.length);verts.push({x:px,y:py,adj:[],nb:new Set(),owner:-1})}
+ let id=m.get(key);v.push(id);verts[id].adj.push(cells.length)}
+ cells.push({q,r,x,y,v})}
+ cells.forEach(c=>c.v.forEach((id,k)=>{let j=c.v[(k+1)%6];verts[id].nb.add(j);verts[j].nb.add(id)}));
+ let types=shuffle(breeds.flatMap((b,i)=>Array(b[1]).fill(i)).concat([-1]));
+ cells.forEach((c,i)=>c.breed=types[i]);
+ // Outer clockwise ring, inner clockwise ring, center
+ let ring=n=>cells.map((c,i)=>({...c,i})).filter(c=>Math.max(Math.abs(c.q),Math.abs(c.r),Math.abs(c.q+c.r))===n)
+ .sort((a,b)=>((Math.atan2(a.y-345,a.x-375)+Math.PI*2+Math.PI*5/6)%(2*Math.PI))-((Math.atan2(b.y-345,b.x-375)+Math.PI*2+Math.PI*5/6)%(2*Math.PI)));
+ let spiral=[...ring(2),...ring(1),...ring(0)],nums=[...numbers];
+ spiral.forEach(c=>{c.num=c.breed===-1?null:nums.shift()});
+ inspector=cells.findIndex(c=>c.breed===-1);bank=Array(5).fill(20);
+ let n=Number(document.getElementById("count").value);
+ players=Array.from({length:n},(_,i)=>({cards:Array(5).fill(0),buildings:0}));
+ order=[...Array(n).keys(),...Array(n).keys()].map((_,i)=>i<n?i:2*n-1-i);
+ step=0;mode="setup";turn=0;rolled=false;history=[];say("Nowa plansza. Rozstaw pierwsze hodowle.");draw()}
+function dist(a,b){if(a===b)return 0;let seen=new Set([a]),f=[a];for(let d=1;d<=3;d++){let n=[];for(let v of f)for(let j of verts[v].nb)if(!seen.has(j)){if(j===b)return d;seen.add(j);n.push(j)}f=n}return 99}
+function legal(i,p){let v=verts[i];if(v.owner!==-1||[...v.nb].some(j=>verts[j].owner!==-1))return false;
+ let own=verts.map((v,j)=>v.owner===p?j:-1).filter(j=>j>=0);return !own.length||own.some(j=>dist(i,j)<=3)}
+function place(i){if(mode!=="setup")return;let p=order[step];if(!legal(i,p))return;verts[i].owner=p;players[p].buildings++;step++;
+ say("Gracz "+(p+1)+" stawia hodowlę "+players[p].buildings);
+ if(players[p].buildings===2){let given=[];for(let j of verts[i].adj){let b=cells[j].breed;if(b>=0&&bank[b]>0){bank[b]--;players[p].cards[b]++;given.push(breeds[b][0])}}say("Karty początkowe: "+(given.join(", ")||"brak"))}
+ if(step===order.length){mode="play";say("Rozstawienie zakończone. Rozpoczyna gracz 1.")}draw()}
+function produce(n){if(n===7){mode="fci";say("Wypadło 7: dotknij heksu, aby przenieść inspektora (odrzucanie i kradzież jeszcze niedostępne).");return}
+ let owed=players.map(()=>Array(5).fill(0));cells.forEach((c,i)=>{if(c.num!==n||i===inspector)return;for(let v of c.v)if(verts[v].owner>=0)owed[verts[v].owner][c.breed]++});
+ for(let b=0;b<5;b++){let total=owed.reduce((a,x)=>a+x[b],0);if(total>bank[b]){say("Brak kart w banku: "+breeds[b][0]);continue}
+ players.forEach((p,i)=>{if(owed[i][b]){p.cards[b]+=owed[i][b];bank[b]-=owed[i][b];say("Gracz "+(i+1)+": +"+owed[i][b]+" "+breeds[b][0])}})}}
+function draw(){
+ svg.replaceChildren();
+ cells.forEach((c,i)=>{let points=c.v.map(j=>verts[j].x+","+verts[j].y).join(" ");svg.appendChild(el("polygon",{points,fill:c.breed<0?"#d7d5c7":breeds[c.breed][2],stroke:"#fff", "stroke-width":3,"data-cell":i}));
+ svg.appendChild(el("text",{x:c.x,y:c.y-15,"text-anchor":"middle","font-size":13,"font-weight":"bold","pointer-events":"none"},c.breed<0?"Biuro FCI":breeds[c.breed][0]));
+ if(c.num){svg.appendChild(el("circle",{cx:c.x,cy:c.y+12,r:19,fill:"#fff6dc",stroke:"#75694b","pointer-events":"none"}));svg.appendChild(el("text",{x:c.x,y:c.y+18,"text-anchor":"middle","font-size":19,fill:[6,8].includes(c.num)?"#bb2929":"#25372b","pointer-events":"none"},c.num))}
+ if(i===inspector)svg.appendChild(el("text",{x:c.x,y:c.y+47,"text-anchor":"middle","font-size":22,"pointer-events":"none"},"★"))});
+ verts.forEach((v,i)=>{let p=mode==="setup"?order[step]:turn,good=mode==="setup"&&legal(i,p);
+ svg.appendChild(el("circle",{cx:v.x,cy:v.y,r:v.owner>=0?12:good?8:5,fill:v.owner>=0?colors[v.owner]:good?"#36b765":"#e4bd72",stroke:"#5d5137","stroke-width":2,"data-vertex":i}));
+ if(v.owner>=0)svg.appendChild(el("text",{x:v.x,y:v.y+4,"text-anchor":"middle","font-size":12,fill:"white","font-weight":"bold","pointer-events":"none"},v.owner+1))});
+ document.getElementById("status").textContent=mode==="setup"?"Rozstawienie "+(step+1)+"/"+order.length+" — gracz "+(order[step]+1):mode==="fci"?"Przenieś inspektora FCI":"Tura gracza "+(turn+1);
+ document.getElementById("players").innerHTML=players.map((p,i)=>'<p style="color:'+colors[i]+'"><b>Gracz '+(i+1)+'</b>: '+p.buildings+' hodowle, '+p.cards.reduce((a,b)=>a+b,0)+' kart <small>('+p.cards.join(" / ")+')</small></p>').join("");
+ document.getElementById("roll").disabled=mode!=="play"||rolled;document.getElementById("next").disabled=mode!=="play"||!rolled}
+svg.addEventListener("click",e=>{let v=e.target.closest("[data-vertex]"),c=e.target.closest("[data-cell]");if(v)place(+v.dataset.vertex);else if(c&&mode==="fci"){let i=+c.dataset.cell;if(i!==inspector&&cells[i].breed>=0){inspector=i;mode="play";say("Inspektor przeniesiony.");draw()}}});
+document.getElementById("new").onclick=init;
+document.getElementById("roll").onclick=()=>{if(mode!=="play"||rolled)return;rolled=true;let a=1+Math.floor(Math.random()*6),b=1+Math.floor(Math.random()*6);document.getElementById("dice").textContent="Kości: "+a+" + "+b+" = "+(a+b);produce(a+b);draw()};
+document.getElementById("next").onclick=()=>{if(mode!=="play"||!rolled)return;turn=(turn+1)%players.length;rolled=false;document.getElementById("dice").textContent="";draw()};init();
+</script></html>
