@@ -1,0 +1,2 @@
+body{font-family:system-ui;background:#f3f0e7;color:#243b2e;margin:0}header{background:#24513c;color:white;padding:15px}main{max-width:850px;margin:auto;padding:12px}.card{background:white;border-radius:12px;padding:12px;margin:10px 0}svg{width:100%;touch-action:manipulation}button,select{font:inherit;padding:9px;border-radius:7px;border:1px solid #aaa;background:white}button{background:#287a4e;color:white}.small{font-size:13px}#history{max-height:170px;overflow:auto}
+button:disabled{opacity:.45;cursor:not-allowed}#board{background:#f8f4e9;border-radius:10px}
